@@ -1,534 +1,699 @@
-import React, { useState, useEffect } from "react";
-import {
-  Box,
-  Heading,
-  Text,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Button,
-  Icon,
-  useColorModeValue,
-  Badge,
-  HStack,
-  VStack,
-  useDisclosure,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalCloseButton,
-  ModalFooter,
-  Flex,
-  Input,
-  InputGroup,
-  InputLeftElement,
-  SimpleGrid,
-  Spinner,
-  Alert,
-  AlertIcon,
-  FormControl,
-  FormLabel,
-  Select,
-  Textarea,
-  useToast,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
-  StatArrow,
-} from "@chakra-ui/react";
-import { 
-  MdEvent, 
-  MdEdit, 
-  MdDelete, 
-  MdVisibility, 
-  MdSearch, 
-  MdAdd,
-  MdPhone,
-  MdCheckCircle,
-  MdCancel,
-  MdSchedule,
-  MdRefresh
-} from "react-icons/md";
-import { useDatabase } from "contexts/DatabaseContext";
-import ScheduleAppointmentModal from "components/modals/ScheduleAppointmentModal";
-import RescheduleAppointmentModal from "components/modals/RescheduleAppointmentModal";
+import React, { useState, useEffect, useMemo } from 'react';
+import { appointmentsAPI, patientsAPI, centersAPI } from '../../../services/api';
+import FullScreenModal from '../../../components/modal/FullScreenModal';
+import { MdSearch, MdEdit, MdDelete, MdAdd, MdCalendarToday, MdPerson, MdLocationOn, MdAccessTime } from 'react-icons/md';
 
-export default function Appointments() {
+const Appointments = () => {
   const [appointments, setAppointments] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [patients, setPatients] = useState([]);
+  const [centers, setCenters] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState(0);
-  
-  // Modal states
-  const { isOpen: isDetailsOpen, onOpen: onDetailsOpen, onClose: onDetailsClose } = useDisclosure();
-  const { isOpen: isScheduleOpen, onOpen: onScheduleOpen, onClose: onScheduleClose } = useDisclosure();
-  const { isOpen: isRescheduleOpen, onOpen: onRescheduleOpen, onClose: onRescheduleClose } = useDisclosure();
-  const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
-  
-  const { appointmentService, patientService, isInitialized } = useDatabase();
-  const toast = useToast();
-
-  // Chakra Color Mode
-  const textColor = useColorModeValue("secondaryGray.900", "white");
-  const borderColor = useColorModeValue("gray.200", "gray.600");
-  const bgColor = useColorModeValue("white", "navy.700");
-  const searchBg = useColorModeValue("gray.50", "gray.800");
-  const hoverBg = useColorModeValue("gray.50", "gray.600");
-  const sectionBg = useColorModeValue("gray.50", "gray.700");
-  const cardBg = useColorModeValue("white", "gray.600");
-
-  // Load appointments from database
-  useEffect(() => {
-    const loadAppointments = async () => {
-      if (!isInitialized) return;
-      
-      try {
-        setLoading(true);
-        setError(null);
-        const appointmentsData = appointmentService.getAllAppointments();
-        setAppointments(appointmentsData);
-      } catch (err) {
-        console.error('Error loading appointments:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadAppointments();
-  }, [isInitialized, appointmentService]);
-
-  // Filter appointments based on search term and tab
-  const filteredAppointments = appointments.filter(appointment => {
-    const matchesSearch = appointment.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         appointment.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         appointment.doctor.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (activeTab === 0) return matchesSearch; // All
-    if (activeTab === 1) return matchesSearch && appointment.status === 'Scheduled';
-    if (activeTab === 2) return matchesSearch && appointment.status === 'Completed';
-    if (activeTab === 3) return matchesSearch && appointment.status === 'Cancelled';
-    if (activeTab === 4) return matchesSearch && appointment.status === 'Rescheduled';
-    
-    return matchesSearch;
+  const [showModal, setShowModal] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState(null);
+  const [view, setView] = useState('list');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filters, setFilters] = useState({
+    patient_id: '',
+    center_id: '',
+    status: ''
   });
+  const [formData, setFormData] = useState({
+    patient_id: '',
+    center_id: '',
+    appointment_date: '',
+    status: 'Scheduled',
+    notes: ''
+  });
+
+  useEffect(() => {
+    fetchAppointments();
+    fetchPatients();
+    fetchCenters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
+
+  const fetchAppointments = async () => {
+    try {
+      const response = await appointmentsAPI.getAll(filters);
+      setAppointments(response.data.appointments || response.data);
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPatients = async () => {
+    try {
+      const response = await patientsAPI.getAll();
+      setPatients(response.data.patients || response.data);
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+    }
+  };
+
+  const fetchCenters = async () => {
+    try {
+      const response = await centersAPI.getAll();
+      setCenters(response.data);
+    } catch (error) {
+      console.error('Error fetching centers:', error);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingAppointment) {
+        await appointmentsAPI.update(editingAppointment.id, formData);
+      } else {
+        await appointmentsAPI.create(formData);
+      }
+      setShowModal(false);
+      setEditingAppointment(null);
+      setFormData({
+        patient_id: '',
+        center_id: '',
+        appointment_date: '',
+        status: 'Scheduled',
+        notes: ''
+      });
+      fetchAppointments();
+    } catch (error) {
+      console.error('Error saving appointment:', error);
+    }
+  };
+
+  const handleEdit = (appointment) => {
+    setEditingAppointment(appointment);
+    setFormData({
+      patient_id: appointment.patient_id,
+      center_id: appointment.center_id,
+      appointment_date: appointment.appointment_date,
+      status: appointment.status,
+      notes: appointment.notes || ''
+    });
+    setShowModal(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this appointment?')) {
+      try {
+        await appointmentsAPI.delete(id);
+        fetchAppointments();
+      } catch (error) {
+        console.error('Error deleting appointment:', error);
+      }
+    }
+  };
+
+  const openModal = () => {
+    setEditingAppointment(null);
+    setFormData({
+      patient_id: '',
+      center_id: '',
+      appointment_date: '',
+      status: 'Scheduled',
+      notes: ''
+    });
+    setShowModal(true);
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "Scheduled":
-        return "blue";
-      case "Completed":
-        return "green";
-      case "Cancelled":
-        return "red";
-      case "Rescheduled":
-        return "orange";
-      default:
-        return "gray";
+      case 'Scheduled': return 'bg-blue-100 text-blue-800';
+      case 'Completed': return 'bg-green-100 text-green-800';
+      case 'Cancelled': return 'bg-red-100 text-red-800';
+      case 'Rescheduled': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const handleViewDetails = (appointment) => {
-    setSelectedAppointment(appointment);
-    onDetailsOpen();
+  const getUpcomingAppointments = () => {
+    const now = new Date();
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    
+    return appointments.filter(apt => {
+      const aptDate = new Date(apt.appointment_date);
+      return aptDate >= now && aptDate <= nextWeek && apt.status === 'Scheduled';
+    });
   };
 
-  const handleScheduleAppointment = () => {
-    onScheduleOpen();
-  };
+  const stats = useMemo(() => {
+    const total = appointments.length;
+    const scheduled = appointments.filter(a => a.status === 'Scheduled').length;
+    const completed = appointments.filter(a => a.status === 'Completed').length;
+    const upcoming = getUpcomingAppointments().length;
+    
+    return { total, scheduled, completed, upcoming };
+  }, [appointments]);
 
-  const refreshAppointments = async () => {
-    try {
-      const appointmentsData = appointmentService.getAllAppointments();
-      setAppointments(appointmentsData);
-    } catch (err) {
-      console.error('Error refreshing appointments:', err);
-    }
-  };
+  const filteredAppointments = useMemo(() => {
+    return appointments.filter(appointment => {
+      const matchesSearch = searchQuery === '' || 
+        appointment.patient_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        appointment.center_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        appointment.patient_email?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      return matchesSearch;
+    });
+  }, [appointments, searchQuery]);
 
-  const handleReschedule = (appointment) => {
-    console.log('Reschedule button clicked for appointment:', appointment);
-    setSelectedAppointment(appointment);
-    onRescheduleOpen();
-  };
-
-  const handleDelete = (appointment) => {
-    setSelectedAppointment(appointment);
-    onDeleteOpen();
-  };
-
-  const handleCancel = async (appointment) => {
-    try {
-      await appointmentService.cancelAppointment(appointment.id, 'Appointment cancelled by user');
-      const updatedAppointments = appointments.map(apt => 
-        apt.id === appointment.id ? { ...apt, status: 'Cancelled' } : apt
-      );
-      setAppointments(updatedAppointments);
-      toast({
-        title: 'Appointment Cancelled',
-        description: `${appointment.patient_name}'s appointment has been cancelled.`,
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to cancel appointment.',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-    }
-  };
-
-  const handleComplete = async (appointment) => {
-    try {
-      await appointmentService.completeAppointment(appointment.id, 'Appointment completed successfully');
-      const updatedAppointments = appointments.map(apt => 
-        apt.id === appointment.id ? { ...apt, status: 'Completed' } : apt
-      );
-      setAppointments(updatedAppointments);
-      toast({
-        title: 'Appointment Completed',
-        description: `${appointment.patient_name}'s appointment has been marked as completed.`,
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to complete appointment.',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (selectedAppointment) {
-      try {
-        await appointmentService.deleteAppointment(selectedAppointment.id);
-        setAppointments(appointments.filter(apt => apt.id !== selectedAppointment.id));
-        onDeleteClose();
-        setSelectedAppointment(null);
-        toast({
-          title: 'Appointment Deleted',
-          description: 'Appointment has been deleted successfully.',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
-      } catch (error) {
-        toast({
-          title: 'Error',
-          description: 'Failed to delete appointment.',
-          status: 'error',
-          duration: 3000,
-          isClosable: true,
-        });
-      }
-    }
-  };
-
-  // Get appointment statistics
-  const stats = {
-    total: appointments.length,
-    scheduled: appointments.filter(apt => apt.status === 'Scheduled').length,
-    completed: appointments.filter(apt => apt.status === 'Completed').length,
-    cancelled: appointments.filter(apt => apt.status === 'Cancelled').length,
-    rescheduled: appointments.filter(apt => apt.status === 'Rescheduled').length,
-  };
-
-  // Show loading state
   if (loading) {
     return (
-      <Box pt={{ base: "130px", md: "80px", xl: "80px" }} display="flex" justifyContent="center" alignItems="center" minH="50vh">
-        <VStack spacing={4}>
-          <Spinner size="xl" color="brand.500" />
-          <Text color={textColor}>Loading appointments...</Text>
-        </VStack>
-      </Box>
-    );
-  }
-
-  // Show error state
-  if (error) {
-    return (
-      <Box pt={{ base: "130px", md: "80px", xl: "80px" }}>
-        <Alert status="error">
-          <AlertIcon />
-          <Box>
-            <Text fontWeight="bold">Error loading appointments</Text>
-            <Text fontSize="sm">{error}</Text>
-          </Box>
-        </Alert>
-      </Box>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-500"></div>
+      </div>
     );
   }
 
   return (
-    <Box pt={{ base: "130px", md: "80px", xl: "80px" }}>
-      <VStack spacing={6} align="stretch">
-        {/* Header */}
-        <Box>
-          <Heading size="lg" mb={2} color={textColor}>Appointments</Heading>
-          <Text color="secondaryGray.600">Schedule and manage patient appointments.</Text>
-        </Box>
+    <div className="mt-3 space-y-6">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div></div>
+        <button
+          onClick={openModal}
+          className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 text-white rounded-xl hover:bg-brand-600 transition-colors font-medium shadow-sm"
+        >
+          <MdAdd className="w-5 h-5" />
+          Schedule Appointment
+        </button>
+      </div>
 
-        {/* Statistics */}
-        <SimpleGrid columns={{ base: 2, md: 5 }} spacing={4}>
-          <Box p={4} bg={cardBg} borderRadius="lg" border="1px solid" borderColor={borderColor}>
-            <Stat>
-              <StatLabel color={textColor}>Total</StatLabel>
-              <StatNumber color={textColor}>{stats.total}</StatNumber>
-            </Stat>
-          </Box>
-          <Box p={4} bg={cardBg} borderRadius="lg" border="1px solid" borderColor={borderColor}>
-            <Stat>
-              <StatLabel color={textColor}>Scheduled</StatLabel>
-              <StatNumber color="blue.500">{stats.scheduled}</StatNumber>
-            </Stat>
-          </Box>
-          <Box p={4} bg={cardBg} borderRadius="lg" border="1px solid" borderColor={borderColor}>
-            <Stat>
-              <StatLabel color={textColor}>Completed</StatLabel>
-              <StatNumber color="green.500">{stats.completed}</StatNumber>
-            </Stat>
-          </Box>
-          <Box p={4} bg={cardBg} borderRadius="lg" border="1px solid" borderColor={borderColor}>
-            <Stat>
-              <StatLabel color={textColor}>Cancelled</StatLabel>
-              <StatNumber color="red.500">{stats.cancelled}</StatNumber>
-            </Stat>
-          </Box>
-          <Box p={4} bg={cardBg} borderRadius="lg" border="1px solid" borderColor={borderColor}>
-            <Stat>
-              <StatLabel color={textColor}>Rescheduled</StatLabel>
-              <StatNumber color="orange.500">{stats.rescheduled}</StatNumber>
-            </Stat>
-          </Box>
-        </SimpleGrid>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-navy-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Total Appointments</p>
+              <p className="text-2xl font-bold text-navy-700 dark:text-white mt-1">{stats.total}</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+              <MdCalendarToday className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+          </div>
+        </div>
 
-        {/* Search and Actions */}
-        <HStack spacing={4} justify="space-between">
-          <InputGroup maxW="400px">
-            <InputLeftElement pointerEvents="none">
-              <Icon as={MdSearch} color="gray.400" />
-            </InputLeftElement>
-            <Input
-              placeholder="Search appointments..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              bg={searchBg}
-              borderColor={borderColor}
-            />
-          </InputGroup>
-          <Button
-            leftIcon={<Icon as={MdAdd} />}
-            colorScheme="brand"
-            onClick={handleScheduleAppointment}
-          >
-            Schedule Appointment
-          </Button>
-        </HStack>
+        <div className="bg-white dark:bg-navy-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Scheduled</p>
+              <p className="text-2xl font-bold text-navy-700 dark:text-white mt-1">{stats.scheduled}</p>
+            </div>
+            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg flex items-center justify-center">
+              <MdAccessTime className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+            </div>
+          </div>
+        </div>
 
-        {/* Tabs */}
-        <Tabs index={activeTab} onChange={setActiveTab}>
-          <TabList>
-            <Tab>All ({appointments.length})</Tab>
-            <Tab>Scheduled ({stats.scheduled})</Tab>
-            <Tab>Completed ({stats.completed})</Tab>
-            <Tab>Cancelled ({stats.cancelled})</Tab>
-            <Tab>Rescheduled ({stats.rescheduled})</Tab>
-          </TabList>
+        <div className="bg-white dark:bg-navy-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Upcoming (7 days)</p>
+              <p className="text-2xl font-bold text-navy-700 dark:text-white mt-1">{stats.upcoming}</p>
+            </div>
+            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+              <MdPerson className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            </div>
+          </div>
+        </div>
 
-          <TabPanels>
-            <TabPanel px={0}>
-              {/* Appointments Table */}
-              <Box bg={bgColor} borderRadius="lg" p={6} boxShadow="sm">
-                <Table variant="simple" size="md">
-                  <Thead>
-                    <Tr>
-                      <Th color={textColor} fontWeight="600">Patient</Th>
-                      <Th color={textColor} fontWeight="600">Date & Time</Th>
-                      <Th color={textColor} fontWeight="600">Type</Th>
-                      <Th color={textColor} fontWeight="600">Doctor</Th>
-                      <Th color={textColor} fontWeight="600">Status</Th>
-                      <Th color={textColor} fontWeight="600" textAlign="center">Actions</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {filteredAppointments.map((appointment) => (
-                      <Tr key={appointment.id} _hover={{ bg: hoverBg }}>
-                        <Td>
-                          <Text fontWeight="600" color={textColor}>{appointment.patient_name}</Text>
-                        </Td>
-                        <Td>
-                          <VStack align="start" spacing={1}>
-                            <Text color={textColor}>{new Date(appointment.appointment_date).toLocaleDateString()}</Text>
-                            <Text fontSize="sm" color="secondaryGray.600">{appointment.appointment_time}</Text>
-                          </VStack>
-                        </Td>
-                        <Td color={textColor}>{appointment.type}</Td>
-                        <Td color={textColor}>{appointment.doctor}</Td>
-                        <Td>
-                          <Badge colorScheme={getStatusColor(appointment.status)} variant="subtle">
-                            {appointment.status}
-                          </Badge>
-                        </Td>
-                        <Td>
-                          <HStack spacing={2} justify="center">
-                            <Button
-                              size="sm"
-                              colorScheme="blue"
-                              variant="outline"
-                              onClick={() => handleViewDetails(appointment)}
-                              aria-label="View details"
-                            >
-                              <Icon as={MdVisibility} />
-                            </Button>
-                            {(appointment.status === 'Scheduled' || appointment.status === 'Rescheduled') && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  colorScheme="green"
-                                  variant="outline"
-                                  onClick={() => handleComplete(appointment)}
-                                  aria-label="Complete appointment"
-                                >
-                                  <Icon as={MdCheckCircle} />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  colorScheme="orange"
-                                  variant="outline"
-                                  onClick={() => handleReschedule(appointment)}
-                                  aria-label="Reschedule appointment"
-                                >
-                                  <Icon as={MdRefresh} />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  colorScheme="yellow"
-                                  variant="outline"
-                                  onClick={() => handleCancel(appointment)}
-                                  aria-label="Cancel appointment"
-                                >
-                                  <Icon as={MdCancel} />
-                                </Button>
-                              </>
-                            )}
-                            <Button
-                              size="sm"
-                              colorScheme="red"
-                              variant="outline"
-                              onClick={() => handleDelete(appointment)}
-                              aria-label="Delete appointment"
-                            >
-                              <Icon as={MdDelete} />
-                            </Button>
-                          </HStack>
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </Box>
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
-      </VStack>
+        <div className="bg-white dark:bg-navy-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Completed</p>
+              <p className="text-2xl font-bold text-navy-700 dark:text-white mt-1">{stats.completed}</p>
+            </div>
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      {/* Appointment Details Modal */}
-      <Modal isOpen={isDetailsOpen} onClose={onDetailsClose} size="lg">
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader color={textColor}>Appointment Details</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            {selectedAppointment && (
-              <VStack spacing={4} align="stretch">
-                <Box p={4} bg={sectionBg} borderRadius="lg">
-                  <Text fontWeight="bold" color={textColor} mb={2}>Patient Information</Text>
-                  <Text color={textColor}>Name: {selectedAppointment.patient_name}</Text>
-                  <Text color={textColor}>Patient ID: #{selectedAppointment.patient_id}</Text>
-                </Box>
-                <Box p={4} bg={sectionBg} borderRadius="lg">
-                  <Text fontWeight="bold" color={textColor} mb={2}>Appointment Details</Text>
-                  <Text color={textColor}>Date: {new Date(selectedAppointment.appointment_date).toLocaleDateString()}</Text>
-                  <Text color={textColor}>Time: {selectedAppointment.appointment_time}</Text>
-                  <Text color={textColor}>Duration: {selectedAppointment.duration} minutes</Text>
-                  <Text color={textColor}>Type: {selectedAppointment.type}</Text>
-                  <Text color={textColor}>Doctor: {selectedAppointment.doctor}</Text>
-                  <Text color={textColor}>Status: <Badge colorScheme={getStatusColor(selectedAppointment.status)}>{selectedAppointment.status}</Badge></Text>
-                </Box>
-                {selectedAppointment.notes && (
-                  <Box p={4} bg={sectionBg} borderRadius="lg">
-                    <Text fontWeight="bold" color={textColor} mb={2}>Notes</Text>
-                    <Text color={textColor}>{selectedAppointment.notes}</Text>
-                  </Box>
-                )}
-              </VStack>
-            )}
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onDetailsClose}>
-              Close
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      {/* Upcoming Appointments Alert */}
+      {getUpcomingAppointments().length > 0 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                You have <strong>{getUpcomingAppointments().length}</strong> upcoming appointments this week.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Delete Confirmation Modal */}
-      <Modal isOpen={isDeleteOpen} onClose={onDeleteClose}>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader color={textColor}>Confirm Delete</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Text>Are you sure you want to delete this appointment? This action cannot be undone.</Text>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onDeleteClose}>
-              Cancel
-            </Button>
-            <Button colorScheme="red" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      <div className="bg-white dark:bg-navy-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="lg:col-span-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Search
+            </label>
+            <div className="relative">
+              <MdSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by patient or center..."
+                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-navy-700 dark:text-white"
+              />
+            </div>
+          </div>
 
-      {/* Schedule Appointment Modal */}
-      <ScheduleAppointmentModal 
-        isOpen={isScheduleOpen} 
-        onClose={onScheduleClose}
-        onAppointmentCreated={refreshAppointments}
-      />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Patient
+            </label>
+            <select
+              value={filters.patient_id}
+              onChange={(e) => setFilters({ ...filters, patient_id: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-navy-700 dark:text-white"
+            >
+              <option value="">All Patients</option>
+              {patients.map((patient) => (
+                <option key={patient.id} value={patient.id}>
+                  {patient.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      {/* Reschedule Appointment Modal */}
-      <RescheduleAppointmentModal 
-        isOpen={isRescheduleOpen} 
-        onClose={onRescheduleClose}
-        appointment={selectedAppointment}
-        onAppointmentRescheduled={refreshAppointments}
-      />
-    </Box>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Center
+            </label>
+            <select
+              value={filters.center_id}
+              onChange={(e) => setFilters({ ...filters, center_id: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-navy-700 dark:text-white"
+            >
+              <option value="">All Centers</option>
+              {centers.map((center) => (
+                <option key={center.id} value={center.id}>
+                  {center.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Status
+            </label>
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-navy-700 dark:text-white"
+            >
+              <option value="">All Status</option>
+              <option value="Scheduled">Scheduled</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+              <option value="Rescheduled">Rescheduled</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-navy-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-navy-700 dark:text-white">
+              All Appointments
+            </h2>
+            <span className="px-2.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-full">
+              {filteredAppointments.length}
+            </span>
+          </div>
+          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <button
+              onClick={() => setView('list')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                view === 'list' 
+                  ? 'bg-white dark:bg-navy-800 text-gray-900 dark:text-white shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setView('calendar')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                view === 'calendar' 
+                  ? 'bg-white dark:bg-navy-800 text-gray-900 dark:text-white shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {view === 'list' ? (
+          filteredAppointments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
+                <MdCalendarToday className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No appointments found</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                {searchQuery ? 'Try adjusting your search or filters' : 'Get started by scheduling your first appointment'}
+              </p>
+              {!searchQuery && (
+                <button
+                  onClick={openModal}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+                >
+                  <MdAdd className="w-5 h-5" />
+                  Schedule Appointment
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-navy-900/50">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                      Patient
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                      Center
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                      Date & Time
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                      Created By
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredAppointments.map((appointment) => (
+                    <tr key={appointment.id} className="hover:bg-gray-50 dark:hover:bg-navy-900/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-brand-500/10 rounded-full flex items-center justify-center">
+                            <MdPerson className="w-5 h-5 text-brand-500" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-navy-700 dark:text-white">
+                              {appointment.patient_name}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {appointment.patient_email}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <MdLocationOn className="w-4 h-4 text-gray-400" />
+                          <div>
+                            <div className="text-sm text-navy-700 dark:text-white font-medium">
+                              {appointment.center_name}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {appointment.center_city}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <MdAccessTime className="w-4 h-4 text-gray-400" />
+                          <div className="text-sm text-navy-700 dark:text-white">
+                            {new Date(appointment.appointment_date).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(appointment.status)}`}>
+                          {appointment.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-navy-700 dark:text-white">
+                          {appointment.created_by_name}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEdit(appointment)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <MdEdit className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(appointment.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <MdDelete className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
+          filteredAppointments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
+                <MdCalendarToday className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No appointments found</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                {searchQuery ? 'Try adjusting your search or filters' : 'Get started by scheduling your first appointment'}
+              </p>
+              {!searchQuery && (
+                <button
+                  onClick={openModal}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+                >
+                  <MdAdd className="w-5 h-5" />
+                  Schedule Appointment
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredAppointments.map((appointment) => (
+                  <div key={appointment.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-5 hover:shadow-lg transition-all hover:border-brand-500 dark:hover:border-brand-500">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-brand-500/10 rounded-full flex items-center justify-center">
+                          <MdPerson className="w-5 h-5 text-brand-500" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-navy-700 dark:text-white">
+                            {appointment.patient_name}
+                          </h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {appointment.patient_email}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(appointment.status)}`}>
+                        {appointment.status}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        <MdLocationOn className="w-4 h-4 text-gray-400" />
+                        <span>{appointment.center_name}, {appointment.center_city}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        <MdAccessTime className="w-4 h-4 text-gray-400" />
+                        <span>
+                          {new Date(appointment.appointment_date).toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        By {appointment.created_by_name}
+                      </span>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleEdit(appointment)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                          title="Edit"
+                        >
+                          <MdEdit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(appointment.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                          <MdDelete className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        )}
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-navy-800 rounded-2xl p-8 w-full max-w-2xl shadow-2xl">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center text-white">
+                <MdCalendarToday className="text-2xl" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {editingAppointment ? 'Edit Appointment' : 'Schedule New Appointment'}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {editingAppointment ? 'Update appointment details' : 'Schedule a new appointment'}
+                </p>
+              </div>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Patient
+                </label>
+                <select
+                  required
+                  value={formData.patient_id}
+                  onChange={(e) => setFormData({ ...formData, patient_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-navy-700 dark:text-white"
+                >
+                  <option value="">Select Patient</option>
+                  {patients.map((patient) => (
+                    <option key={patient.id} value={patient.id}>
+                      {patient.name} - {patient.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Center
+                </label>
+                <select
+                  required
+                  value={formData.center_id}
+                  onChange={(e) => setFormData({ ...formData, center_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-navy-700 dark:text-white"
+                >
+                  <option value="">Select Center</option>
+                  {centers.map((center) => (
+                    <option key={center.id} value={center.id}>
+                      {center.name} - {center.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Appointment Date & Time
+                </label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={formData.appointment_date}
+                  onChange={(e) => setFormData({ ...formData, appointment_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-navy-700 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Status
+                </label>
+                <select
+                  required
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-navy-700 dark:text-white"
+                >
+                  <option value="Scheduled">Scheduled</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                  <option value="Rescheduled">Rescheduled</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  rows={3}
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-navy-700 dark:text-white"
+                  placeholder="Appointment notes..."
+                />
+              </div>
+              
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-6 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition-all font-medium shadow-md hover:shadow-lg"
+                >
+                  <MdCalendarToday className="text-lg" />
+                  {editingAppointment ? 'Update' : 'Schedule'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
   );
-}
+};
+
+export default Appointments;

@@ -1,5 +1,3 @@
-// Daily Traffic Dashboards Default
-
 export const barChartDataDailyTraffic = [
   {
     name: "Daily Traffic",
@@ -17,6 +15,7 @@ export const barChartOptionsDailyTraffic = {
     style: {
       fontSize: "12px",
       fontFamily: undefined,
+      backgroundColor: "#000000"
     },
     onDatasetHover: {
       style: {
@@ -103,42 +102,91 @@ export const barChartOptionsDailyTraffic = {
   },
 };
 
-// Consumption Users Reports
+export const pieChartOptions = {
+  labels: ["Your files", "System", "Empty"],
+  colors: ["#4318FF", "#6AD2FF", "#EFF4FB"],
+  chart: {
+    width: "50px",
+  },
+  states: {
+    hover: {
+      filter: {
+        type: "none",
+      },
+    },
+  },
+  legend: {
+    show: false,
+  },
+  dataLabels: {
+    enabled: false,
+  },
+  hover: { mode: null },
+  plotOptions: {
+    donut: {
+      expandOnClick: false,
+      donut: {
+        labels: {
+          show: false,
+        },
+      },
+    },
+  },
+  fill: {
+    colors: ["#4318FF", "#6AD2FF", "#EFF4FB"],
+  },
+  tooltip: {
+    enabled: true,
+    theme: "dark",
+    style: {
+      fontSize: "12px",
+      fontFamily: undefined,
+      backgroundColor: "#000000"
+    },
+  },
+};
 
-export const barChartDataConsumption = [
+export const pieChartData = [63, 25, 12];
+
+export const barChartDataWeeklyRevenue = [
   {
     name: "PRODUCT A",
     data: [400, 370, 330, 390, 320, 350, 360, 320, 380],
+    color: "#6AD2Fa",
   },
   {
     name: "PRODUCT B",
     data: [400, 370, 330, 390, 320, 350, 360, 320, 380],
+    color: "#4318FF",
   },
   {
     name: "PRODUCT C",
     data: [400, 370, 330, 390, 320, 350, 360, 320, 380],
+    color: "#EFF4FB",
   },
 ];
 
-export const barChartOptionsConsumption = {
+export const barChartOptionsWeeklyRevenue = {
   chart: {
     stacked: true,
     toolbar: {
       show: false,
     },
   },
+  // colors:['#ff3322','#faf']
   tooltip: {
     style: {
       fontSize: "12px",
       fontFamily: undefined,
+      backgroundColor: "#000000"
     },
+    theme: 'dark',
     onDatasetHover: {
       style: {
         fontSize: "12px",
         fontFamily: undefined,
       },
     },
-    theme: "dark",
   },
   xaxis: {
     categories: ["17", "18", "19", "20", "21", "22", "23", "24", "25"],
@@ -208,103 +256,63 @@ export const barChartOptionsConsumption = {
   },
 };
 
-export const pieChartOptions = {
-  labels: ["Your files", "System", "Empty"],
-  colors: ["#4318FF", "#6AD2FF", "#EFF4FB"],
-  chart: {
-    width: "50px",
-  },
-  states: {
-    hover: {
-      filter: {
-        type: "none",
-      },
-    },
-  },
-  legend: {
-    show: false,
-  },
-  dataLabels: {
-    enabled: false,
-  },
-  hover: { mode: null },
-  plotOptions: {
-    donut: {
-      expandOnClick: false,
-      donut: {
-        labels: {
-          show: false,
-        },
-      },
-    },
-  },
-  fill: {
-    colors: ["#4318FF", "#6AD2FF", "#EFF4FB"],
-  },
-  tooltip: {
-    enabled: true,
-    theme: "dark",
-  },
-};
-
-export const pieChartData = [63, 25, 12];
-
-// Total Spent Default
-
 export const lineChartDataTotalSpent = [
   {
     name: "Revenue",
     data: [50, 64, 48, 66, 49, 68],
+    color: "#4318FF",
   },
   {
     name: "Profit",
     data: [30, 40, 24, 46, 20, 46],
+    color: "#6AD2FF",
   },
 ];
 
 export const lineChartOptionsTotalSpent = {
+  legend: {
+    show: false,
+  },
+
+  theme: {
+    mode: "light",
+  },
   chart: {
+    type: "line",
+
     toolbar: {
       show: false,
     },
-    dropShadow: {
-      enabled: true,
-      top: 13,
-      left: 0,
-      blur: 10,
-      opacity: 0.1,
-      color: "#4318FF",
-    },
   },
-  colors: ["#4318FF", "#39B8FF"],
-  markers: {
-    size: 0,
-    colors: "white",
-    strokeColors: "#7551FF",
-    strokeWidth: 3,
-    strokeOpacity: 0.9,
-    strokeDashArray: 0,
-    fillOpacity: 1,
-    discrete: [],
-    shape: "circle",
-    radius: 2,
-    offsetX: 0,
-    offsetY: 0,
-    showNullDataPoints: true,
-  },
-  tooltip: {
-    theme: "dark",
-  },
+
   dataLabels: {
     enabled: false,
   },
   stroke: {
     curve: "smooth",
-    type: "line",
+  },
+
+  tooltip: {
+    style: {
+      fontSize: "12px",
+      fontFamily: undefined,
+      backgroundColor: "#000000"
+    },
+    theme: 'dark',
+    x: {
+      format: "dd/MM/yy HH:mm",
+    },
+  },
+  grid: {
+    show: false,
   },
   xaxis: {
-    type: "numeric",
-    categories: ["SEP", "OCT", "NOV", "DEC", "JAN", "FEB"],
+    axisBorder: {
+      show: false,
+    },
+    axisTicks: {
+      show: false,
+    },
     labels: {
       style: {
         colors: "#A3AED0",
@@ -312,25 +320,12 @@ export const lineChartOptionsTotalSpent = {
         fontWeight: "500",
       },
     },
-    axisBorder: {
-      show: false,
-    },
-    axisTicks: {
-      show: false,
-    },
+    type: "text",
+    range: undefined,
+    categories: ["SEP", "OCT", "NOV", "DEC", "JAN", "FEB"],
   },
+
   yaxis: {
     show: false,
   },
-  legend: {
-    show: false,
-  },
-  grid: {
-    show: false,
-    column: {
-      color: ["#7551FF", "#39B8FF"],
-      opacity: 0.5,
-    },
-  },
-  color: ["#7551FF", "#39B8FF"],
 };
