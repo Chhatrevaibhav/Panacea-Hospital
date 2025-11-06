@@ -9,12 +9,18 @@ const router = express.Router();
 router.get('/', authenticateToken, requireRole(['Admin']), (req, res) => {
   try {
     const users = db.prepare(`
-      SELECT id, name, email, role, phone, specialization, status, created_at, updated_at
+      SELECT id, name, email, role, phone, specialization, status, navigation_permissions, created_at, updated_at
       FROM users
       ORDER BY created_at DESC
     `).all();
     
-    res.json(users);
+    // Parse navigation_permissions for each user
+    const usersWithParsedPermissions = users.map(user => ({
+      ...user,
+      navigation_permissions: user.navigation_permissions ? JSON.parse(user.navigation_permissions) : []
+    }));
+    
+    res.json(usersWithParsedPermissions);
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -25,7 +31,7 @@ router.get('/', authenticateToken, requireRole(['Admin']), (req, res) => {
 router.get('/:id', authenticateToken, requireRole(['Admin']), (req, res) => {
   try {
     const user = db.prepare(`
-      SELECT id, name, email, role, phone, specialization, status, created_at, updated_at
+      SELECT id, name, email, role, phone, specialization, status, navigation_permissions, created_at, updated_at
       FROM users
       WHERE id = ?
     `).get(req.params.id);
@@ -33,6 +39,9 @@ router.get('/:id', authenticateToken, requireRole(['Admin']), (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+    
+    // Parse navigation_permissions
+    user.navigation_permissions = user.navigation_permissions ? JSON.parse(user.navigation_permissions) : [];
     
     res.json(user);
   } catch (error) {
@@ -44,7 +53,7 @@ router.get('/:id', authenticateToken, requireRole(['Admin']), (req, res) => {
 // Create new user (Admin only)
 router.post('/', authenticateToken, requireRole(['Admin']), async (req, res) => {
   try {
-    const { name, email, password, role, phone, specialization } = req.body;
+    const { name, email, password, role, phone, specialization, navigation_permissions } = req.body;
 
     // Validation
     if (!name || !email || !password || !role) {
@@ -70,18 +79,32 @@ router.post('/', authenticateToken, requireRole(['Admin']), async (req, res) => 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Set default permissions based on role if not provided
+    let permissions = navigation_permissions;
+    if (!permissions || permissions.length === 0) {
+      const defaultPermissions = {
+        'Admin': ['dashboard', 'centers', 'leads', 'patients', 'calls', 'appointments', 'reports', 'users'],
+        'Doctor': ['dashboard', 'leads', 'patients', 'calls', 'appointments', 'reports'],
+        'Staff': ['dashboard', 'leads', 'patients', 'appointments'],
+        'Telecaller': ['dashboard', 'leads', 'patients', 'calls', 'appointments']
+      };
+      permissions = defaultPermissions[role] || ['dashboard'];
+    }
+
     // Insert user
     const result = db.prepare(`
-      INSERT INTO users (name, email, password_hash, role, phone, specialization, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'Active')
-    `).run(name, email, hashedPassword, role, phone || null, specialization || null);
+      INSERT INTO users (name, email, password_hash, role, phone, specialization, status, navigation_permissions)
+      VALUES (?, ?, ?, ?, ?, ?, 'Active', ?)
+    `).run(name, email, hashedPassword, role, phone || null, specialization || null, JSON.stringify(permissions));
 
     // Get the created user
     const newUser = db.prepare(`
-      SELECT id, name, email, role, phone, specialization, status, created_at
+      SELECT id, name, email, role, phone, specialization, status, navigation_permissions, created_at
       FROM users
       WHERE id = ?
     `).get(result.lastInsertRowid);
+
+    newUser.navigation_permissions = newUser.navigation_permissions ? JSON.parse(newUser.navigation_permissions) : [];
 
     res.status(201).json({
       message: 'User created successfully',
@@ -96,7 +119,7 @@ router.post('/', authenticateToken, requireRole(['Admin']), async (req, res) => 
 // Update user (Admin only)
 router.put('/:id', authenticateToken, requireRole(['Admin']), async (req, res) => {
   try {
-    const { name, email, role, phone, specialization, status, password } = req.body;
+    const { name, email, role, phone, specialization, status, password, navigation_permissions } = req.body;
     const userId = req.params.id;
 
     // Check if user exists
@@ -156,6 +179,10 @@ router.put('/:id', authenticateToken, requireRole(['Admin']), async (req, res) =
       updates.push('password_hash = ?');
       params.push(hashedPassword);
     }
+    if (navigation_permissions !== undefined) {
+      updates.push('navigation_permissions = ?');
+      params.push(JSON.stringify(navigation_permissions));
+    }
 
     updates.push('updated_at = CURRENT_TIMESTAMP');
     params.push(userId);
@@ -167,10 +194,12 @@ router.put('/:id', authenticateToken, requireRole(['Admin']), async (req, res) =
 
     // Get updated user
     const updatedUser = db.prepare(`
-      SELECT id, name, email, role, phone, specialization, status, created_at, updated_at
+      SELECT id, name, email, role, phone, specialization, status, navigation_permissions, created_at, updated_at
       FROM users
       WHERE id = ?
     `).get(userId);
+
+    updatedUser.navigation_permissions = updatedUser.navigation_permissions ? JSON.parse(updatedUser.navigation_permissions) : [];
 
     res.json({
       message: 'User updated successfully',
