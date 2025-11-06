@@ -24,6 +24,25 @@ export function SidebarLinks(props) {
         return null;
       }
 
+      // Map route path to permission name
+      const pathToPermission = {
+        'dashboard': 'dashboard',
+        'centers': 'centers',
+        'leads': 'leads',
+        'patients': 'patients',
+        'calls': 'calls',
+        'appointments': 'appointments',
+        'reports': 'reports',
+        'users': 'users'
+      };
+
+      const requiredPermission = pathToPermission[route.path];
+      
+      // Check if user has permission for this route (skip check if no permission mapping)
+      if (requiredPermission && user?.navigation_permissions && !user.navigation_permissions.includes(requiredPermission)) {
+        return null;
+      }
+
       if (
         (route.layout === "/admin" ||
         route.layout === "/auth" ||

@@ -26,8 +26,14 @@ export const AuthProvider = ({ children }) => {
           setToken(storedToken);
           setUser(JSON.parse(storedUser));
           
-          // Verify token is still valid
-          await authAPI.getCurrentUser();
+          // Verify token is still valid and fetch latest user data
+          const response = await authAPI.getCurrentUser();
+          if (response.data) {
+            const freshUserData = response.data;
+            setUser(freshUserData);
+            // Update localStorage with fresh user data including permissions
+            localStorage.setItem('user', JSON.stringify(freshUserData));
+          }
         } catch (error) {
           // Token is invalid, clear storage
           localStorage.removeItem('token');

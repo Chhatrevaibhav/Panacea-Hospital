@@ -34,6 +34,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
 
+    // Parse navigation_permissions
+    const navigation_permissions = user.navigation_permissions ? JSON.parse(user.navigation_permissions) : [];
+
     // Generate JWT token
     const token = jwt.sign(
       { 
@@ -52,7 +55,8 @@ router.post('/login', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        navigation_permissions
       }
     });
   } catch (error) {
@@ -64,11 +68,14 @@ router.post('/login', async (req, res) => {
 // Get current user info
 router.get('/me', require('../middleware/auth').authenticateToken, (req, res) => {
   try {
-    const user = db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT id, name, email, role, navigation_permissions FROM users WHERE id = ?').get(req.user.id);
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+
+    // Parse navigation_permissions
+    user.navigation_permissions = user.navigation_permissions ? JSON.parse(user.navigation_permissions) : [];
 
     res.json(user);
   } catch (error) {

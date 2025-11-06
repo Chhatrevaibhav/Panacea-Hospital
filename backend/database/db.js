@@ -103,27 +103,86 @@ const createTables = () => {
   `);
 };
 
+// Add navigation_permissions column if it doesn't exist (for existing databases)
+const addNavigationPermissionsColumn = () => {
+  try {
+    // Check if column exists
+    const columnExists = db.prepare("PRAGMA table_info(users)").all().some(col => col.name === 'navigation_permissions');
+    
+    if (!columnExists) {
+      db.exec(`
+        ALTER TABLE users 
+        ADD COLUMN navigation_permissions TEXT DEFAULT '[]'
+      `);
+      console.log('Added navigation_permissions column to users table');
+      
+      // Set default permissions for existing users based on their role
+      setDefaultPermissionsForExistingUsers();
+    }
+  } catch (error) {
+    console.error('Error adding navigation_permissions column:', error.message);
+  }
+};
+
+// Set default permissions for existing users based on their role
+const setDefaultPermissionsForExistingUsers = () => {
+  try {
+    const defaultPermissions = {
+      'Admin': JSON.stringify(['dashboard', 'centers', 'leads', 'patients', 'calls', 'appointments', 'reports', 'users']),
+      'Doctor': JSON.stringify(['dashboard', 'leads', 'patients', 'calls', 'appointments', 'reports']),
+      'Staff': JSON.stringify(['dashboard', 'leads', 'patients', 'appointments']),
+      'Telecaller': JSON.stringify(['dashboard', 'leads', 'patients', 'calls', 'appointments'])
+    };
+
+    const users = db.prepare('SELECT id, role, navigation_permissions FROM users').all();
+    
+    users.forEach(user => {
+      // Only update if permission is empty or '[]'
+      if (!user.navigation_permissions || user.navigation_permissions === '[]') {
+        const permissions = defaultPermissions[user.role];
+        if (permissions) {
+          db.prepare('UPDATE users SET navigation_permissions = ? WHERE id = ?').run(permissions, user.id);
+        }
+      }
+    });
+    
+    console.log('Set default permissions for existing users');
+  } catch (error) {
+    console.error('Error setting default permissions for existing users:', error.message);
+  }
+};
+
 // Initialize database with default data
 const initializeDatabase = async () => {
   createTables();
+  addNavigationPermissionsColumn();
   
   // Check if admin user exists
   const adminExists = db.prepare('SELECT id FROM users WHERE role = ?').get('Admin');
   
   if (!adminExists) {
+    // Define default permissions for each role
+    const adminPermissions = JSON.stringify([
+      'dashboard', 'centers', 'leads', 'patients', 'calls', 
+      'appointments', 'reports', 'users'
+    ]);
+    const telecallerPermissions = JSON.stringify([
+      'dashboard', 'leads', 'patients', 'calls', 'appointments'
+    ]);
+    
     // Create default admin user
     const hashedPassword = await bcrypt.hash('admin123', 10);
     db.prepare(`
-      INSERT INTO users (name, email, password_hash, role)
-      VALUES (?, ?, ?, ?)
-    `).run('Admin User', 'admin@hospital.com', hashedPassword, 'Admin');
+      INSERT INTO users (name, email, password_hash, role, navigation_permissions)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('Admin User', 'admin@hospital.com', hashedPassword, 'Admin', adminPermissions);
 
     // Create default telecaller
     const telecallerPassword = await bcrypt.hash('telecaller123', 10);
     db.prepare(`
-      INSERT INTO users (name, email, password_hash, role)
-      VALUES (?, ?, ?, ?)
-    `).run('Telecaller User', 'telecaller@hospital.com', telecallerPassword, 'Telecaller');
+      INSERT INTO users (name, email, password_hash, role, navigation_permissions)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('Telecaller User', 'telecaller@hospital.com', telecallerPassword, 'Telecaller', telecallerPermissions);
 
     // Create sample centers
     db.prepare(`

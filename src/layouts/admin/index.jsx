@@ -29,7 +29,28 @@ export default function Admin(props) {
           routes[i].layout + "/" + routes[i].path
         ) !== -1
       ) {
-        setCurrentRoute(routes[i].name);
+        // Verify user has permission to view this route
+        const pathToPermission = {
+          'dashboard': 'dashboard',
+          'centers': 'centers',
+          'leads': 'leads',
+          'patients': 'patients',
+          'calls': 'calls',
+          'appointments': 'appointments',
+          'reports': 'reports',
+          'users': 'users'
+        };
+        const requiredPermission = pathToPermission[routes[i].path];
+        
+        // If route requires permission and user doesn't have it, redirect to dashboard
+        if (requiredPermission && user?.navigation_permissions && !user.navigation_permissions.includes(requiredPermission)) {
+          // Redirect will be handled by Routes component, just set to Dashboard
+          setCurrentRoute("Dashboard");
+        } else if (routes[i].adminOnly && user?.role !== 'Admin') {
+          setCurrentRoute("Dashboard");
+        } else {
+          setCurrentRoute(routes[i].name);
+        }
       }
     }
     return activeRoute;
@@ -46,8 +67,31 @@ export default function Admin(props) {
     return activeNavbar;
   };
   const getRoutes = (routes) => {
+    // Map route path to permission name
+    const pathToPermission = {
+      'dashboard': 'dashboard',
+      'centers': 'centers',
+      'leads': 'leads',
+      'patients': 'patients',
+      'calls': 'calls',
+      'appointments': 'appointments',
+      'reports': 'reports',
+      'users': 'users'
+    };
+
     return routes.map((prop, key) => {
       if (prop.layout === "/admin") {
+        // Check admin-only routes
+        if (prop.adminOnly && user?.role !== 'Admin') {
+          return null;
+        }
+
+        // Check navigation permissions
+        const requiredPermission = pathToPermission[prop.path];
+        if (requiredPermission && user?.navigation_permissions && !user.navigation_permissions.includes(requiredPermission)) {
+          return null;
+        }
+
         return (
           <Route path={`/${prop.path}`} element={prop.component} key={key} />
         );

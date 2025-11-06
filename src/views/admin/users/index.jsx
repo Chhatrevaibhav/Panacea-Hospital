@@ -13,6 +13,17 @@ const Users = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
+  const availablePages = [
+    'dashboard',
+    'centers',
+    'leads',
+    'patients',
+    'calls',
+    'appointments',
+    'reports',
+    'users'
+  ];
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -20,7 +31,8 @@ const Users = () => {
     role: 'Staff',
     phone: '',
     specialization: '',
-    status: 'Active'
+    status: 'Active',
+    navigation_permissions: []
   });
 
   useEffect(() => {
@@ -40,15 +52,51 @@ const Users = () => {
     }
   };
 
+  const getDefaultPermissionsForRole = (role) => {
+    const defaultPermissions = {
+      'Admin': ['dashboard', 'centers', 'leads', 'patients', 'calls', 'appointments', 'reports', 'users'],
+      'Doctor': ['dashboard', 'leads', 'patients', 'calls', 'appointments', 'reports'],
+      'Staff': ['dashboard', 'leads', 'patients', 'appointments'],
+      'Telecaller': ['dashboard', 'leads', 'patients', 'calls', 'appointments']
+    };
+    return defaultPermissions[role] || ['dashboard'];
+  };
+
   const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    
+    // If role is changing, update permissions to default for that role
+    if (name === 'role') {
+      setFormData({
+        ...formData,
+        role: value,
+        navigation_permissions: getDefaultPermissionsForRole(value)
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value
+      });
+    }
+  };
+
+  const handlePermissionToggle = (page) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      navigation_permissions: formData.navigation_permissions.includes(page)
+        ? formData.navigation_permissions.filter(p => p !== page)
+        : [...formData.navigation_permissions, page]
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate permissions
+    if (formData.navigation_permissions.length === 0) {
+      toast.error('Please select at least one navigation page');
+      return;
+    }
     
     try {
       if (editingUser) {
@@ -79,7 +127,8 @@ const Users = () => {
       role: user.role,
       phone: user.phone || '',
       specialization: user.specialization || '',
-      status: user.status
+      status: user.status,
+      navigation_permissions: user.navigation_permissions || getDefaultPermissionsForRole(user.role)
     });
     setShowModal(true);
   };
@@ -107,7 +156,8 @@ const Users = () => {
       role: 'Staff',
       phone: '',
       specialization: '',
-      status: 'Active'
+      status: 'Active',
+      navigation_permissions: getDefaultPermissionsForRole('Staff')
     });
     setEditingUser(null);
   };
@@ -115,6 +165,20 @@ const Users = () => {
   const handleCloseModal = () => {
     setShowModal(false);
     resetForm();
+  };
+
+  const handleOpenModal = () => {
+    setFormData({
+      name: '',
+      email: '',
+      password: '',
+      role: 'Staff',
+      phone: '',
+      specialization: '',
+      status: 'Active',
+      navigation_permissions: getDefaultPermissionsForRole('Staff')
+    });
+    setShowModal(true);
   };
 
   const filteredUsers = useMemo(() => {
@@ -197,7 +261,7 @@ const Users = () => {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div></div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={handleOpenModal}
           className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 text-white rounded-xl hover:bg-brand-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
         >
           <MdPersonAdd className="w-5 h-5" />
@@ -531,6 +595,43 @@ const Users = () => {
                         <option value="Inactive">Inactive</option>
                       </select>
                     </div>
+                  )}
+                </div>
+
+                {/* Navigation Permissions */}
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    Navigation Access *
+                  </label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {availablePages.map((page) => (
+                      <label
+                        key={page}
+                        className="flex items-center gap-2 p-3 border border-gray-300 dark:border-white/10 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.navigation_permissions.includes(page)}
+                          onChange={() => handlePermissionToggle(page)}
+                          className="w-4 h-4 text-brand-500 border-gray-300 rounded focus:ring-brand-500 dark:bg-navy-900 dark:border-white/20"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300 capitalize">
+                          {page === 'dashboard' ? 'Dashboard' :
+                           page === 'centers' ? 'Centers' :
+                           page === 'leads' ? 'Leads' :
+                           page === 'patients' ? 'Patients' :
+                           page === 'calls' ? 'Calls' :
+                           page === 'appointments' ? 'Appointments' :
+                           page === 'reports' ? 'Reports' :
+                           page === 'users' ? 'Users' : page}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {formData.navigation_permissions.length === 0 && (
+                    <p className="mt-2 text-xs text-red-500">
+                      At least one navigation page must be selected
+                    </p>
                   )}
                 </div>
                 
